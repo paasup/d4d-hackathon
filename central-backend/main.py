@@ -189,7 +189,7 @@ async def restart_simulator():
 # --- 챗봇 UI → AI 엔진 ---
 @app.post("/api/chat")
 async def chat(req: ChatRequest) -> ChatResponse:
-    answer = chat_engine.answer(req.query)
+    answer = await chat_engine.answer(req.query)
     return ChatResponse(answer=answer)
 
 

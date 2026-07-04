@@ -349,8 +349,10 @@ function bindCommandButton(btnId, resolveCommand, onSuccess) {
     if (!state.selectedId) return;
     btn.disabled = true;
     const command = resolveCommand();
-    const ok = await sendCommand(command);
-    if (ok && onSuccess) onSuccess();
+    // 서버는 명령 수신 즉시 정찰 타이머(6s)를 시작하므로, 네트워크 응답(특히 첫 요청의 콜드
+    // 커넥션 지연)을 기다리지 않고 시각 효과를 먼저 재생해 체감 지연을 없앤다.
+    if (onSuccess) onSuccess();
+    await sendCommand(command);
     setTimeout(() => { btn.disabled = false; }, 1500);
   });
 }
@@ -437,23 +439,150 @@ function renderAlertList(alerts) {
 // --- 전술 AI 프롬프트 패널 (지도 위 좌측 오버레이) ---
 const chatModal = document.getElementById("chat-modal");
 const chatToggleBtn = document.getElementById("chat-toggle-btn");
+const chatFullscreenBtn = document.getElementById("chat-fullscreen-btn");
 function setChatOpen(open) {
   chatModal.classList.toggle("hidden", !open);
   chatToggleBtn.classList.toggle("hidden", open);
+  if (!open) setChatFullscreen(false);
   if (open) document.getElementById("chat-input").focus();
+}
+function setChatFullscreen(full) {
+  chatModal.classList.toggle("map-modal-fullscreen", full);
+  chatFullscreenBtn.setAttribute("aria-label", full ? "전체화면 해제" : "전체화면");
 }
 chatToggleBtn.addEventListener("click", () => setChatOpen(true));
 document.getElementById("chat-modal-close").addEventListener("click", () => setChatOpen(false));
+chatFullscreenBtn.addEventListener("click", () => {
+  setChatFullscreen(!chatModal.classList.contains("map-modal-fullscreen"));
+});
 
 // --- 챗봇 ---
+// '>' 는 이스케이프하지 않는다 — 블록인용(>) 마커 탐지가 이스케이프 이후 텍스트에 대해 이뤄지므로,
+// 여기서 '>' 를 '&gt;' 로 바꾸면 인용 블록 정규식이 매칭되지 않는다. 단독 '>' 는 태그를 열 수 없어 안전하다.
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+}
+
+// 챗봇 답변에 언급된 에지 ID(GOP-21, COP-02 등)를 클릭 가능한 링크로 표시한다.
+const EDGE_LINK_PATTERN = /\b([A-Z]{2,}-\d{1,3})\b/g;
+
+function renderInlineMd(s) {
+  return s
+    .replace(EDGE_LINK_PATTERN, (match) => `<a href="#" class="edge-link" data-edge-id="${match}">${match}</a>`)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/`(.+?)`/g, "<code>$1</code>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>");
+}
+
+function renderMdTable(rows) {
+  const dataRows = rows.filter((r) => !/^\|[\s:|-]+\|$/.test(r));
+  if (!dataRows.length) return "";
+  const cellsOf = (r) => r.slice(1, -1).split("|").map((c) => c.trim());
+  const header = cellsOf(dataRows[0]);
+  const body = dataRows.slice(1);
+  let html = "<table><thead><tr>" +
+    header.map((h) => `<th>${renderInlineMd(h)}</th>`).join("") +
+    "</tr></thead><tbody>";
+  for (const r of body) {
+    html += "<tr>" + cellsOf(r).map((c) => `<td>${renderInlineMd(c)}</td>`).join("") + "</tr>";
+  }
+  return html + "</tbody></table>";
+}
+
+// 간단한 마크다운 → HTML 렌더러 (헤더/볼드/이탤릭/목록/인용/표/구분선). 외부 라이브러리 미사용.
+function renderMarkdown(text) {
+  const lines = escapeHtml(text).split("\n");
+  let html = "";
+  let listItems = null;
+  let tableRows = null;
+  let paraLines = [];
+
+  const flushPara = () => {
+    if (paraLines.length) {
+      html += `<p>${paraLines.map(renderInlineMd).join("<br>")}</p>`;
+      paraLines = [];
+    }
+  };
+  const flushList = () => {
+    if (listItems) {
+      html += `<ul>${listItems.map((i) => `<li>${renderInlineMd(i)}</li>`).join("")}</ul>`;
+      listItems = null;
+    }
+  };
+  const flushTable = () => {
+    if (tableRows) html += renderMdTable(tableRows);
+    tableRows = null;
+  };
+
+  for (const raw of lines) {
+    const line = raw.trim();
+
+    if (/^\|.*\|$/.test(line)) {
+      flushPara();
+      flushList();
+      (tableRows || (tableRows = [])).push(line);
+      continue;
+    }
+    if (tableRows) flushTable();
+
+    if (!line) {
+      flushPara();
+      flushList();
+      continue;
+    }
+
+    let m;
+    if ((m = line.match(/^(#{1,6})\s+(.*)$/))) {
+      flushPara();
+      flushList();
+      const level = Math.min(m[1].length + 2, 6);
+      html += `<h${level}>${renderInlineMd(m[2])}</h${level}>`;
+    } else if (/^-{3,}$/.test(line)) {
+      flushPara();
+      flushList();
+      html += "<hr>";
+    } else if ((m = line.match(/^>\s?(.*)$/))) {
+      flushPara();
+      flushList();
+      html += `<blockquote>${renderInlineMd(m[1])}</blockquote>`;
+    } else if ((m = line.match(/^[-*]\s+(.*)$/))) {
+      flushPara();
+      (listItems || (listItems = [])).push(m[1]);
+    } else {
+      flushList();
+      paraLines.push(line);
+    }
+  }
+  flushPara();
+  flushList();
+  flushTable();
+  return html;
+}
+
 function appendChatMessage(role, text) {
   const history = document.getElementById("chat-history");
   const el = document.createElement("div");
   el.className = `chat-msg ${role}`;
-  el.textContent = text;
+  if (role === "assistant") {
+    el.innerHTML = renderMarkdown(text);
+  } else {
+    el.textContent = text;
+  }
   history.appendChild(el);
   history.scrollTop = history.scrollHeight;
+  return el;
 }
+
+document.getElementById("chat-history").addEventListener("click", (ev) => {
+  const link = ev.target.closest(".edge-link");
+  if (!link) return;
+  ev.preventDefault();
+  const edgeId = link.dataset.edgeId;
+  if (!state.edges.has(edgeId)) return;
+  setChatFullscreen(false);
+  selectEdge(edgeId);
+  document.getElementById("side-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+});
 
 document.getElementById("chat-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
@@ -462,6 +591,8 @@ document.getElementById("chat-form").addEventListener("submit", async (ev) => {
   if (!query) return;
   appendChatMessage("user", query);
   input.value = "";
+  const pending = appendChatMessage("assistant", "생각 중...");
+  pending.classList.add("pending");
   try {
     const res = await fetch("/api/chat", {
       method: "POST",
@@ -470,9 +601,11 @@ document.getElementById("chat-form").addEventListener("submit", async (ev) => {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    appendChatMessage("assistant", data.answer);
+    pending.innerHTML = renderMarkdown(data.answer);
+    pending.classList.remove("pending");
   } catch (e) {
-    appendChatMessage("assistant", `AI 서버에 연결할 수 없습니다: ${e.message}`);
+    pending.textContent = `AI 서버에 연결할 수 없습니다: ${e.message}`;
+    pending.classList.remove("pending");
   }
 });
 

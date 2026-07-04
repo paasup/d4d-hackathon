@@ -2,3 +2,5 @@ fastapi
 uvicorn[standard]
 websockets
 pydantic
+openai
+python-dotenv

@@ -45,7 +45,10 @@
       <div class="map-modal-content">
         <div class="map-modal-header">
           <span>전술 AI 프롬프트</span>
-          <button id="chat-modal-close" class="map-modal-close" aria-label="닫기">✕</button>
+          <div class="map-modal-header-actions">
+            <button id="chat-fullscreen-btn" class="map-modal-icon-btn" aria-label="전체화면">⛶</button>
+            <button id="chat-modal-close" class="map-modal-close" aria-label="닫기">✕</button>
+          </div>
         </div>
         <div id="chat-history"></div>
         <form id="chat-form">
@@ -57,7 +60,7 @@
 
     <aside id="side-panel" class="map-modal map-modal-right map-modal-transparent">
       <div class="map-modal-content">
-        <h2>에지 상세 정보</h2>
+        <h2>에지COP 상세 정보</h2>
         <div id="edge-empty" class="muted">지도에서 에지 핀을 클릭하세요.</div>
         <div id="edge-detail" class="hidden">
           <details class="detail-group" open>
