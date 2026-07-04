@@ -11,11 +11,14 @@ from agent import EdgeAgent
 
 
 def make_agents(n: int) -> list[EdgeAgent]:
+    # 위치 생성만 별도 시드로 고정 — 재기동해도 매번 같은 좌표를 배정해 대시보드에서
+    # 마커가 재기동 때마다 이동한 것처럼 보이지 않게 한다.
+    position_rng = random.Random(42)
     agents = []
     for i in range(1, n + 1):
         edge_id = f"GOP-{i:02d}"
-        lat = random.uniform(*config.LAT_RANGE)
-        lon = random.uniform(*config.LON_RANGE)
+        lat = position_rng.uniform(*config.LAT_RANGE)
+        lon = position_rng.uniform(*config.LON_RANGE)
         agents.append(EdgeAgent(edge_id, lat, lon))
     return agents
 

@@ -9,12 +9,21 @@ class EdgeState(BaseModel):
     lon: float
     ammo_pct: int                # 0~100
     status: Literal["idle", "resupplying", "resupplied", "alert"]
+    posture: Literal["active", "silent"] = "active"
+    alert_level: Literal["normal", "heightened"] = "normal"
     timestamp: datetime
 
 
 class Command(BaseModel):
     edge_id: str
-    command: Literal["RESUPPLY"]
+    command: Literal[
+        "RESUPPLY",
+        "RECON_DRONE",
+        "SILENT_MODE",
+        "ACTIVE_MODE",
+        "ALERT_LEVEL_UP",
+        "ALERT_LEVEL_DOWN",
+    ]
     issued_at: datetime
 
 

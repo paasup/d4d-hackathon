@@ -31,8 +31,17 @@
       <div class="progress"><div id="d-ammo-bar" class="progress-bar"></div></div>
       <div class="detail-row"><span class="label">상태</span><span id="d-status"></span></div>
       <div class="detail-row"><span class="label">좌표</span><span id="d-coords"></span></div>
+      <div class="detail-row"><span class="label">무선 상태</span><span id="d-posture"></span></div>
+      <div class="detail-row"><span class="label">다음 상태 갱신</span><span id="d-posture-countdown" class="muted"></span></div>
+      <div class="detail-row"><span class="label">경계 태세</span><span id="d-alert-level"></span></div>
       <div id="d-alert" class="alert-banner hidden"></div>
-      <button id="d-resupply-btn">보급 명령 하달</button>
+      <div class="command-buttons">
+        <button id="d-recon-btn" class="cmd-btn">정찰 드론 투입</button>
+        <div id="d-recon-status" class="recon-status hidden"></div>
+        <button id="d-resupply-btn" class="cmd-btn">보급 실행</button>
+        <button id="d-posture-btn" class="cmd-btn">무선 침묵 전환</button>
+        <button id="d-alertlevel-btn" class="cmd-btn">경계태세 격상</button>
+      </div>
       <div id="d-command-result"></div>
     </div>
 

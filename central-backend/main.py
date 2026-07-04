@@ -1,4 +1,7 @@
+import asyncio
+import random
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -50,6 +53,26 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+RECON_RESULTS = [
+    {"safe": True, "text": "보급로 안전 확인"},
+    {"safe": False, "text": "적 활동 포착, 우회로 권장"},
+]
+
+
+async def _run_recon_drone(edge_id: str):
+    await asyncio.sleep(6)
+    result = random.choice(RECON_RESULTS)
+    level = "warning" if result["safe"] else "critical"
+    alert = AlertEvent(
+        edge_id=edge_id,
+        level=level,
+        message=f"🔭 [{edge_id}] 정찰 결과: {result['text']}",
+        recommended_action="현 보급로로 RESUPPLY 진행 가능" if result["safe"] else "교본 제4조(우회로 운용)에 의거 우회로 확보 후 RESUPPLY 진행 권고",
+        triggered_at=datetime.now(timezone.utc),
+    )
+    store.add_alert(alert)
+    await manager.broadcast("alert", alert.model_dump(mode="json"))
+
 
 # --- 에지 → 중앙: 상태 수신 ---
 @app.websocket("/ws/edge")
@@ -79,7 +102,10 @@ async def ws_command(websocket: WebSocket, edge_id: str):
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
-        manager.edge_connections.pop(edge_id, None)
+        # 이 커넥션이 여전히 등록된 최신 커넥션일 때만 제거 (오래된 커넥션이 나중에 끊기며
+        # 새로 등록된 커넥션을 잘못 지우는 경합을 방지)
+        if manager.edge_connections.get(edge_id) is websocket:
+            manager.edge_connections.pop(edge_id, None)
 
 
 # --- 중앙 → 대시보드: 상태/알림 push (여러 브라우저 클라이언트 동시 접속) ---
@@ -109,7 +135,10 @@ async def get_alerts():
 @app.post("/api/command")
 async def post_command(cmd: Command):
     store.pending_commands.append(cmd)
-    await manager.send_command(cmd)
+    if cmd.command == "RECON_DRONE":
+        asyncio.create_task(_run_recon_drone(cmd.edge_id))
+    else:
+        await manager.send_command(cmd)
     return {"ok": True}
 
 

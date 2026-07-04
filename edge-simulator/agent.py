@@ -20,6 +20,8 @@ class EdgeAgent:
         self.lon = lon
         self.ammo_pct = random.randint(*config.AMMO_INIT_RANGE)
         self.status = "idle"
+        self.posture = "active"
+        self.alert_level = "normal"
         self.ws_url = ws_url
 
     async def run(self):
@@ -33,7 +35,12 @@ class EdgeAgent:
                     while True:
                         await self._send_state(ws)
                         self._simulate_ammo_drain()
-                        await asyncio.sleep(random.uniform(*config.SEND_INTERVAL_RANGE))
+                        interval_range = (
+                            config.SILENT_SEND_INTERVAL_RANGE
+                            if self.posture == "silent"
+                            else config.SEND_INTERVAL_RANGE
+                        )
+                        await asyncio.sleep(random.uniform(*interval_range))
             except (websockets.ConnectionClosed, OSError) as e:
                 print(f"[{self.edge_id}] state connection lost ({e}), retrying in 3s...")
                 await asyncio.sleep(3)
@@ -55,22 +62,42 @@ class EdgeAgent:
             lon=self.lon,
             ammo_pct=self.ammo_pct,
             status=self.status,
+            posture=self.posture,
+            alert_level=self.alert_level,
             timestamp=datetime.now(timezone.utc),
         )
         await ws.send(state.model_dump_json())
-        print(f"[{self.edge_id}] ammo={self.ammo_pct}% status={self.status}")
+        print(f"[{self.edge_id}] ammo={self.ammo_pct}% status={self.status} posture={self.posture} alert_level={self.alert_level}")
 
     def _simulate_ammo_drain(self):
-        if self.status == "idle" and self.ammo_pct > 0:
-            self.ammo_pct = max(0, self.ammo_pct - random.randint(*config.AMMO_DRAIN_RANGE))
+        if self.status in ("idle", "alert") and self.ammo_pct > 0:
+            drain = random.randint(*config.AMMO_DRAIN_RANGE)
+            if self.alert_level == "heightened":
+                drain *= 2
+            self.ammo_pct = max(0, self.ammo_pct - drain)
             if self.ammo_pct <= config.AMMO_ALERT_THRESHOLD:
                 self.status = "alert"
 
     async def _listen_commands(self, ws):
         async for msg in ws:
             cmd = json.loads(msg)
-            if cmd.get("edge_id") == self.edge_id and cmd.get("command") == "RESUPPLY":
+            if cmd.get("edge_id") != self.edge_id:
+                continue
+            command = cmd.get("command")
+            if command == "RESUPPLY":
                 await self._handle_resupply()
+            elif command == "SILENT_MODE":
+                self.posture = "silent"
+                print(f"[{self.edge_id}] 무선 침묵 전환")
+            elif command == "ACTIVE_MODE":
+                self.posture = "active"
+                print(f"[{self.edge_id}] 무선 침묵 해제")
+            elif command == "ALERT_LEVEL_UP":
+                self.alert_level = "heightened"
+                print(f"[{self.edge_id}] 경계태세 격상")
+            elif command == "ALERT_LEVEL_DOWN":
+                self.alert_level = "normal"
+                print(f"[{self.edge_id}] 경계태세 격하")
 
     async def _handle_resupply(self):
         print(f"[{self.edge_id}] RESUPPLY 명령 수신, 보급 시작...")
@@ -79,3 +106,5 @@ class EdgeAgent:
         self.ammo_pct = 100
         self.status = "resupplied"
         print(f"[{self.edge_id}] 보급 완료")
+        await asyncio.sleep(3)
+        self.status = "idle"

@@ -75,7 +75,12 @@ main {
   margin-bottom: 12px;
 }
 
-button#d-resupply-btn {
+.command-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cmd-btn {
   width: 100%;
   padding: 10px;
   background: #2563eb;
@@ -85,8 +90,31 @@ button#d-resupply-btn {
   cursor: pointer;
   font-size: 14px;
 }
-button#d-resupply-btn:disabled { background: #3a4152; cursor: not-allowed; }
-button#d-resupply-btn:hover:not(:disabled) { background: #1d4fd0; }
+.cmd-btn:disabled { background: #3a4152; cursor: not-allowed; }
+.cmd-btn:hover:not(:disabled) { background: #1d4fd0; }
+.cmd-btn.cmd-btn-warn { box-shadow: 0 0 0 2px #f08c00 inset; }
+
+.recon-status {
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  margin-top: -2px;
+}
+.recon-status.safe { background: #0a3d1c; color: #5be07a; }
+.recon-status.unsafe { background: #4a3b00; color: #ffd764; }
+
+.convoy-marker {
+  filter: drop-shadow(0 0 4px #2563eb);
+}
+
+.selection-ring {
+  filter: drop-shadow(0 0 5px #000000);
+  animation: selection-pulse 1.2s ease-in-out infinite;
+}
+@keyframes selection-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
 
 #d-command-result { margin-top: 8px; font-size: 13px; }
 
