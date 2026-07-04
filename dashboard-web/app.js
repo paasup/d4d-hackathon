@@ -15,7 +15,8 @@ const DEPOT_COORDS = [37.9, 127.3];
 
 const state = {
   edges: new Map(),        // edge_id -> EdgeState
-  markers: new Map(),      // edge_id -> L.CircleMarker
+  markers: new Map(),      // edge_id -> L.CircleMarker (시각용)
+  hitMarkers: new Map(),   // edge_id -> L.CircleMarker (클릭 판정용, 시각 마커보다 넓게)
   reconStatus: new Map(),  // edge_id -> { safe, message, action }
   detourWaypoint: new Map(), // edge_id -> [lat,lon], 우회로 정찰 성공 시 설정, 다음 RESUPPLY 1회에 소비됨
   lastUpdateAt: new Map(), // edge_id -> 마지막으로 새 상태를 수신한 로컬 시각(ms), 카운트다운 기준점
@@ -73,7 +74,7 @@ function markerColor(ammoPct) {
   return "#2f9e44";
 }
 
-// posture(silent=반투명), alert_level(heightened=주황 테두리)을 기존 ammo 색상 위에 오버레이로 표시
+// posture(silent=반투명+점선 테두리로 스텔스 표현), alert_level(heightened=주황 테두리)을 기존 ammo 색상 위에 오버레이로 표시
 // activeFilter가 걸려 있으면 매칭 안 되는 마커는 흐리게 눌러서 대시보드 카드 클릭 결과를 지도에서 바로 구분되게 함
 function markerStyle(edge) {
   const base = markerColor(edge.ammo_pct);
@@ -86,6 +87,7 @@ function markerStyle(edge) {
     fillColor: base,
     fillOpacity: edge.posture === "silent" ? 0.3 : 0.85,
     opacity: edge.posture === "silent" ? 0.4 : 1,
+    dashArray: edge.posture === "silent" ? "3 4" : null,
   };
 }
 
@@ -114,24 +116,41 @@ document.querySelectorAll(".stat-card").forEach((btn) => {
   btn.addEventListener("click", () => setFilter(btn.dataset.filter));
 });
 
+// 시각 마커(반경 8px)는 그대로 두고, 그보다 넓은 투명 원(반경 16px)을 얹어 클릭 판정 범위를 넓힌다.
+// 지도에서 좁은 점을 정확히 클릭해야 하는 불편을 줄이기 위함 — 클릭/툴팁/팝업은 모두 이 투명 원이 담당.
+const HIT_RADIUS = 16;
+
 function upsertMarker(edge) {
   let marker = state.markers.get(edge.edge_id);
+  let hitMarker = state.hitMarkers.get(edge.edge_id);
   if (!marker) {
     marker = L.circleMarker([edge.lat, edge.lon], {
       radius: 8,
+      interactive: false,
       ...markerStyle(edge),
     });
-    marker.bindTooltip(edge.edge_id);
-    marker.on("click", () => selectEdge(edge.edge_id));
     marker.addTo(map);
     state.markers.set(edge.edge_id, marker);
+
+    hitMarker = L.circleMarker([edge.lat, edge.lon], {
+      radius: HIT_RADIUS,
+      stroke: false,
+      fill: true,
+      fillOpacity: 0.01,
+      className: "marker-hit-area",
+    });
+    hitMarker.bindTooltip(edge.edge_id);
+    hitMarker.on("click", () => selectEdge(edge.edge_id));
+    hitMarker.addTo(map);
+    state.hitMarkers.set(edge.edge_id, hitMarker);
   } else {
     marker.setLatLng([edge.lat, edge.lon]);
     marker.setStyle(markerStyle(edge));
+    hitMarker.setLatLng([edge.lat, edge.lon]);
   }
   const popupText = `${edge.edge_id}: ${edge.ammo_pct}% (${STATUS_LABEL[edge.status]})`;
-  if (marker.getPopup()) marker.setPopupContent(popupText);
-  else marker.bindPopup(popupText);
+  if (hitMarker.getPopup()) hitMarker.setPopupContent(popupText);
+  else hitMarker.bindPopup(popupText);
 }
 
 function applyStates(edgeList) {
@@ -346,14 +365,15 @@ async function sendCommand(command) {
 function bindCommandButton(btnId, resolveCommand, onSuccess) {
   const btn = document.getElementById(btnId);
   btn.addEventListener("click", async () => {
-    if (!state.selectedId) return;
+    if (!state.selectedId || btn.disabled) return;
     btn.disabled = true;
     const command = resolveCommand();
     // 서버는 명령 수신 즉시 정찰 타이머(6s)를 시작하므로, 네트워크 응답(특히 첫 요청의 콜드
     // 커넥션 지연)을 기다리지 않고 시각 효과를 먼저 재생해 체감 지연을 없앤다.
     if (onSuccess) onSuccess();
+    // 응답이 올 때까지 버튼을 잠가 중복 클릭으로 명령이 두 번 전달되는 것을 막는다.
     await sendCommand(command);
-    setTimeout(() => { btn.disabled = false; }, 1500);
+    btn.disabled = false;
   });
 }
 
@@ -367,14 +387,15 @@ bindCommandButton("d-detour-btn", () => "DETOUR_RECON", () => {
 });
 
 document.getElementById("d-resupply-btn").addEventListener("click", async () => {
-  if (!state.selectedId) return;
+  const btn = document.getElementById("d-resupply-btn");
+  if (!state.selectedId || btn.disabled) return;
   const recon = state.reconStatus.get(state.selectedId);
   if (recon && !recon.safe) {
     const proceed = confirm(`⚠️ 정찰 결과 위험 지역입니다 (${recon.action}).\n그래도 보급을 실행하시겠습니까?`);
     if (!proceed) return;
   }
-  const btn = document.getElementById("d-resupply-btn");
   btn.disabled = true;
+  // 응답이 올 때까지 버튼을 잠가 중복 클릭으로 명령이 두 번 전달되는 것을 막는다.
   const ok = await sendCommand("RESUPPLY");
   if (ok) {
     const edge = state.edges.get(state.selectedId);
@@ -384,7 +405,7 @@ document.getElementById("d-resupply-btn").addEventListener("click", async () => 
       state.detourWaypoint.delete(state.selectedId); // 1회 소비 후 초기화
     }
   }
-  setTimeout(() => { btn.disabled = false; }, 1500);
+  btn.disabled = false;
 });
 
 bindCommandButton("d-posture-btn", () => {
@@ -611,9 +632,10 @@ document.getElementById("chat-form").addEventListener("submit", async (ev) => {
 
 // --- 시뮬레이터 재시작 ---
 document.getElementById("restart-sim-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("restart-sim-btn");
+  if (btn.disabled) return;
   const proceed = confirm("시뮬레이터를 초기 상태로 재시작하시겠습니까?\n모든 에지의 탄약/경계태세/알림 기록이 초기화됩니다.");
   if (!proceed) return;
-  const btn = document.getElementById("restart-sim-btn");
   btn.disabled = true;
   try {
     const res = await fetch("/api/simulator/restart", { method: "POST" });
@@ -625,7 +647,7 @@ document.getElementById("restart-sim-btn").addEventListener("click", async () =>
   } catch (e) {
     alert(`재시작 실패: ${e.message}`);
   } finally {
-    setTimeout(() => { btn.disabled = false; }, 1500);
+    btn.disabled = false;
   }
 });
 

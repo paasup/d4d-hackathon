@@ -6,7 +6,7 @@
 <title>중앙 지휘 플랫폼 (COP Dashboard)</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="style.css?v=2" />
+<link rel="stylesheet" href="style.css?v=5" />
 </head>
 <body>
 
@@ -84,14 +84,18 @@
 
           <div class="command-buttons">
             <div class="command-group-label">보급 절차</div>
-            <button id="d-recon-btn" class="cmd-btn">정찰 드론 투입</button>
+            <div class="command-row">
+              <button id="d-recon-btn" class="cmd-btn cmd-btn-lg">정찰 드론 투입</button>
+              <button id="d-resupply-btn" class="cmd-btn cmd-btn-lg">보급 실행</button>
+            </div>
             <div id="d-recon-status" class="recon-status hidden"></div>
             <button id="d-detour-btn" class="cmd-btn cmd-btn-warn hidden">우회로 정찰 실행</button>
-            <button id="d-resupply-btn" class="cmd-btn">보급 실행</button>
 
             <div class="command-group-label">태세 전환</div>
-            <button id="d-posture-btn" class="cmd-btn">무선 침묵 전환</button>
-            <button id="d-alertlevel-btn" class="cmd-btn">경계태세 격상</button>
+            <div class="command-row">
+              <button id="d-posture-btn" class="cmd-btn cmd-btn-lg">무선 침묵 전환</button>
+              <button id="d-alertlevel-btn" class="cmd-btn cmd-btn-lg">경계태세 격상</button>
+            </div>
           </div>
           <div id="d-command-result"></div>
         </div>
@@ -106,6 +110,6 @@
 </section>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="app.js?v=2"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

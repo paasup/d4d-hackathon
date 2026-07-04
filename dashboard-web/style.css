@@ -95,6 +95,44 @@ main {
 #map-panel { position: relative; flex: 1; min-width: 0; min-height: 300px; }
 #map { height: 100%; border-radius: 8px; }
 
+/* Leaflet 팝업/툴팁을 대시보드 다크 테마와 맞춤 */
+.leaflet-popup-content-wrapper {
+  background: #161a23;
+  color: #e6e6e6;
+  border: 1px solid #2a2f3a;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+.leaflet-popup-content {
+  margin: 10px 12px;
+  font-family: "Consolas", "SF Mono", monospace;
+  font-size: 12px;
+}
+.leaflet-popup-tip {
+  background: #161a23;
+  border: 1px solid #2a2f3a;
+  box-shadow: none;
+}
+.leaflet-popup-close-button {
+  color: #8a8f9a !important;
+}
+.leaflet-popup-close-button:hover {
+  color: #e6e6e6 !important;
+}
+.leaflet-tooltip {
+  background: #161a23;
+  color: #e6e6e6;
+  border: 1px solid #2a2f3a;
+  border-radius: 4px;
+  font-family: "Consolas", "SF Mono", monospace;
+  font-size: 11px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.leaflet-tooltip-top:before { border-top-color: #2a2f3a; }
+.leaflet-tooltip-bottom:before { border-bottom-color: #2a2f3a; }
+.leaflet-tooltip-left:before { border-left-color: #2a2f3a; }
+.leaflet-tooltip-right:before { border-right-color: #2a2f3a; }
+
 .map-overlay-btn {
   position: absolute;
   top: 90px;
@@ -311,6 +349,10 @@ main {
 .cmd-btn:hover:not(:disabled) { border-color: #2563eb; background: #161c2c; }
 .cmd-btn.cmd-btn-warn { border-color: #f08c00; color: #ffd764; }
 
+.command-row { display: flex; gap: 8px; }
+.command-row .cmd-btn { flex: 1; width: auto; }
+.cmd-btn-lg { padding: 16px 10px; font-size: 13px; }
+
 .recon-status {
   font-size: 12px;
   padding: 6px 8px;
@@ -319,6 +361,9 @@ main {
 }
 .recon-status.safe { background: #0a3d1c; color: #5be07a; }
 .recon-status.unsafe { background: #4a3b00; color: #ffd764; }
+
+/* 실제 클릭 판정을 담당하는 투명 원 — fill-opacity가 낮아도 클릭이 항상 먹도록 강제 */
+.marker-hit-area { pointer-events: all !important; cursor: pointer; }
 
 .convoy-marker {
   filter: drop-shadow(0 0 4px #2563eb);

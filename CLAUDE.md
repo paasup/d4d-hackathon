@@ -25,7 +25,7 @@
 ## 컴포넌트별 담당
 - edge-simulator: 20~30개 가상 에지, 5~10초 주기 상태 송신, RESUPPLY 명령 수신 시 상태 천이
 - central-backend: FastAPI+WebSocket, in-memory 상태 저장, 룰 트리거(ammo_pct<=20 → AlertEvent), 대시보드 정적 파일 서빙(StaticFiles) + `/ws/dashboard` 브로드캐스트
-- dashboard: Vanilla JS + Leaflet.js, 순수 WebSocket으로 `/ws/dashboard` 구독 (진짜 실시간 push, 전체 rerun 없음), 개별 에지 마커 상시 노출(에지 25개가 넓게 분산돼 있어 클러스터링 시 클릭이 줌인으로 가로채여지는 문제를 피하기 위해 클러스터링 미사용으로 변경), 사이드바 상세정보, 하달하기 버튼. 상세 배경은 [docs/prompt/proposal_realtime_dashboard.md](docs/prompt/proposal_realtime_dashboard.md) 참고.
+- dashboard: Vanilla JS + Leaflet.js, 순수 WebSocket으로 `/ws/dashboard` 구독 (진짜 실시간 push, 전체 rerun 없음), 개별 에지 마커 상시 노출(에지 25개가 넓게 분산돼 있어 클러스터링 시 클릭이 줌인으로 가로채여지는 문제를 피하기 위해 클러스터링 미사용으로 변경), 사이드바 상세정보, 하달하기 버튼. 상세 배경은 [docs/prompt/02.proposal_realtime_dashboard.md](docs/prompt/02.proposal_realtime_dashboard.md) 참고.
 - ai-engine: 교본 텍스트 키워드 매칭(룰 기반) + 챗봇(사전정의 응답 우선, Ollama는 optional)
 
 ## 개발 순서 (이 문서 읽는 세션은 자기 단계만 신경쓸 것)
