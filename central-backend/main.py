@@ -58,6 +58,10 @@ RECON_RESULTS = [
     {"safe": False, "text": "적 활동 포착, 우회로 권장"},
 ]
 
+# 재시작 직후에도 탄약 알림 데모를 바로 보여주기 위해 일부 에지는 경보 수치로 되돌린다.
+# critical(<=10)과 warning(<=20)이 섞이도록 값을 구성.
+RESET_LOW_AMMO_VALUES = [18, 15, 8, 4]
+
 
 async def _run_recon_drone(edge_id: str):
     await asyncio.sleep(6)
@@ -68,6 +72,20 @@ async def _run_recon_drone(edge_id: str):
         level=level,
         message=f"🔭 [{edge_id}] 정찰 결과: {result['text']}",
         recommended_action="현 보급로로 RESUPPLY 진행 가능" if result["safe"] else "교본 제4조(우회로 운용)에 의거 우회로 확보 후 RESUPPLY 진행 권고",
+        triggered_at=datetime.now(timezone.utc),
+    )
+    store.add_alert(alert)
+    await manager.broadcast("alert", alert.model_dump(mode="json"))
+
+
+# 우회로 정찰은 데모 단순화를 위해 항상 안전 확인으로 종료
+async def _run_detour_recon(edge_id: str):
+    await asyncio.sleep(6)
+    alert = AlertEvent(
+        edge_id=edge_id,
+        level="warning",
+        message=f"🔭 [{edge_id}] 우회로 정찰 결과: 우회로 확보, 보급로 안전 확인",
+        recommended_action="확보된 우회로로 RESUPPLY 진행 가능",
         triggered_at=datetime.now(timezone.utc),
     )
     store.add_alert(alert)
@@ -137,8 +155,34 @@ async def post_command(cmd: Command):
     store.pending_commands.append(cmd)
     if cmd.command == "RECON_DRONE":
         asyncio.create_task(_run_recon_drone(cmd.edge_id))
+    elif cmd.command == "DETOUR_RECON":
+        asyncio.create_task(_run_detour_recon(cmd.edge_id))
     else:
         await manager.send_command(cmd)
+    return {"ok": True}
+
+
+# --- 대시보드 → 중앙: 시뮬레이터 재시작 (모든 에지를 초기 상태로 되돌림) ---
+@app.post("/api/simulator/restart")
+async def restart_simulator():
+    target_ids = sorted(store.edge_states.keys())[:len(RESET_LOW_AMMO_VALUES)]
+    low_ammo = dict(zip(target_ids, RESET_LOW_AMMO_VALUES))
+
+    store.reset_all(low_ammo)
+    rule_engine.alerted_edges.clear()
+
+    now = datetime.now(timezone.utc)
+    for edge_id in list(manager.edge_connections.keys()):
+        command = "RESET_LOW" if edge_id in low_ammo else "RESET"
+        await manager.send_command(Command(edge_id=edge_id, command=command, issued_at=now))
+
+    await manager.broadcast("state", [s.model_dump(mode="json") for s in store.get_all_states()])
+    for edge_id in target_ids:
+        state = store.edge_states.get(edge_id)
+        alert = rule_engine.check_and_trigger(state) if state else None
+        if alert:
+            store.add_alert(alert)
+            await manager.broadcast("alert", alert.model_dump(mode="json"))
     return {"ok": True}
 
 

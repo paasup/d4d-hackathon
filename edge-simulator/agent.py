@@ -98,6 +98,18 @@ class EdgeAgent:
             elif command == "ALERT_LEVEL_DOWN":
                 self.alert_level = "normal"
                 print(f"[{self.edge_id}] 경계태세 격하")
+            elif command == "RESET":
+                self.ammo_pct = 100
+                self.status = "idle"
+                self.posture = "active"
+                self.alert_level = "normal"
+                print(f"[{self.edge_id}] 시뮬레이터 재시작 - 초기 상태로 복귀")
+            elif command == "RESET_LOW":
+                self.ammo_pct = random.randint(*config.RESET_LOW_AMMO_RANGE)
+                self.status = "alert"
+                self.posture = "active"
+                self.alert_level = "normal"
+                print(f"[{self.edge_id}] 시뮬레이터 재시작 - 탄약 경보 상태로 복귀 (ammo={self.ammo_pct}%)")
 
     async def _handle_resupply(self):
         print(f"[{self.edge_id}] RESUPPLY 명령 수신, 보급 시작...")

@@ -17,17 +17,28 @@ const state = {
   edges: new Map(),        // edge_id -> EdgeState
   markers: new Map(),      // edge_id -> L.CircleMarker
   reconStatus: new Map(),  // edge_id -> { safe, message, action }
+  detourWaypoint: new Map(), // edge_id -> [lat,lon], 우회로 정찰 성공 시 설정, 다음 RESUPPLY 1회에 소비됨
   lastUpdateAt: new Map(), // edge_id -> 마지막으로 새 상태를 수신한 로컬 시각(ms), 카운트다운 기준점
   selectedId: null,
+  activeFilter: null, // null(전체) | "alert" | "silent" | "heightened"
 };
+
+function matchesFilter(edge) {
+  switch (state.activeFilter) {
+    case "alert": return edge.ammo_pct <= 20;
+    case "silent": return edge.posture === "silent";
+    case "heightened": return edge.alert_level === "heightened";
+    default: return true;
+  }
+}
 
 // --- 지도 ---
 const map = L.map("map").setView([38.0, 127.5], 9);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  attribution: "&copy; OpenStreetMap contributors",
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+  attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+  subdomains: "abcd",
+  maxZoom: 19,
 }).addTo(map);
-const cluster = L.markerClusterGroup();
-map.addLayer(cluster);
 
 // 선택된 에지를 클러스터와 별개 레이어에 표시해, 클러스터링에 가려지지 않고 항상 선명하게 보이게 함
 let selectionRing = null;
@@ -44,7 +55,7 @@ function updateSelectionRing() {
   if (!selectionRing) {
     selectionRing = L.circleMarker(latlng, {
       radius: 14,
-      color: "#000000",
+      color: "#ffd700",
       weight: 3,
       fill: false,
       className: "selection-ring",
@@ -52,6 +63,7 @@ function updateSelectionRing() {
     }).addTo(map);
   } else {
     selectionRing.setLatLng(latlng);
+    selectionRing.bringToFront();
   }
 }
 
@@ -62,8 +74,12 @@ function markerColor(ammoPct) {
 }
 
 // posture(silent=반투명), alert_level(heightened=주황 테두리)을 기존 ammo 색상 위에 오버레이로 표시
+// activeFilter가 걸려 있으면 매칭 안 되는 마커는 흐리게 눌러서 대시보드 카드 클릭 결과를 지도에서 바로 구분되게 함
 function markerStyle(edge) {
   const base = markerColor(edge.ammo_pct);
+  if (state.activeFilter && !matchesFilter(edge)) {
+    return { color: base, weight: 1, fillColor: base, fillOpacity: 0.08, opacity: 0.15 };
+  }
   return {
     color: edge.alert_level === "heightened" ? "#f08c00" : base,
     weight: edge.alert_level === "heightened" ? 3 : 1,
@@ -72,6 +88,31 @@ function markerStyle(edge) {
     opacity: edge.posture === "silent" ? 0.4 : 1,
   };
 }
+
+function refreshMarkerStyles() {
+  for (const [edgeId, marker] of state.markers) {
+    const edge = state.edges.get(edgeId);
+    if (edge) marker.setStyle(markerStyle(edge));
+  }
+}
+
+function setFilter(filter) {
+  state.activeFilter = filter === "all" || state.activeFilter === filter ? null : filter;
+  document.querySelectorAll(".stat-card").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.filter === state.activeFilter);
+  });
+  refreshMarkerStyles();
+  if (state.activeFilter) {
+    const matched = [...state.edges.values()].filter(matchesFilter);
+    if (matched.length) {
+      map.fitBounds(matched.map((e) => [e.lat, e.lon]), { padding: [60, 60], maxZoom: 11 });
+    }
+  }
+}
+
+document.querySelectorAll(".stat-card").forEach((btn) => {
+  btn.addEventListener("click", () => setFilter(btn.dataset.filter));
+});
 
 function upsertMarker(edge) {
   let marker = state.markers.get(edge.edge_id);
@@ -82,16 +123,11 @@ function upsertMarker(edge) {
     });
     marker.bindTooltip(edge.edge_id);
     marker.on("click", () => selectEdge(edge.edge_id));
-    marker.addTo(cluster);
+    marker.addTo(map);
     state.markers.set(edge.edge_id, marker);
   } else {
-    // Leaflet.markercluster는 클러스터에 들어간 마커를 setLatLng만으로 옮기면
-    // 내부 공간 인덱스가 갱신되지 않아 위치가 크게 바뀔 때 마커가 사라져 보일 수 있어
-    // 제거 후 재삽입한다.
-    cluster.removeLayer(marker);
     marker.setLatLng([edge.lat, edge.lon]);
     marker.setStyle(markerStyle(edge));
-    cluster.addLayer(marker);
   }
   const popupText = `${edge.edge_id}: ${edge.ammo_pct}% (${STATUS_LABEL[edge.status]})`;
   if (marker.getPopup()) marker.setPopupContent(popupText);
@@ -120,11 +156,14 @@ function updateStats() {
   const all = [...state.edges.values()];
   document.getElementById("stat-total").textContent = all.length;
   document.getElementById("stat-alert").textContent = all.filter((e) => e.ammo_pct <= 20).length;
+  document.getElementById("stat-silent").textContent = all.filter((e) => e.posture === "silent").length;
+  document.getElementById("stat-heightened").textContent = all.filter((e) => e.alert_level === "heightened").length;
 }
 
 // --- 사이드바 상세 ---
 function selectEdge(edgeId) {
   state.selectedId = edgeId;
+  document.getElementById("d-command-result").textContent = "";
   const edge = state.edges.get(edgeId);
   if (edge) renderDetail(edge);
 }
@@ -142,7 +181,10 @@ function renderDetail(edge) {
   document.getElementById("d-status").textContent = STATUS_LABEL[edge.status];
   document.getElementById("d-coords").textContent = `${edge.lat.toFixed(4)}, ${edge.lon.toFixed(4)}`;
   document.getElementById("d-posture").textContent = POSTURE_LABEL[edge.posture] ?? POSTURE_LABEL.active;
-  document.getElementById("d-alert-level").textContent = ALERT_LEVEL_LABEL[edge.alert_level] ?? ALERT_LEVEL_LABEL.normal;
+  const alertLevelEl = document.getElementById("d-alert-level");
+  alertLevelEl.textContent = ALERT_LEVEL_LABEL[edge.alert_level] ?? ALERT_LEVEL_LABEL.normal;
+  alertLevelEl.classList.toggle("classification-badge", edge.alert_level === "heightened");
+  alertLevelEl.classList.toggle("level-heightened", edge.alert_level === "heightened");
 
   renderPostureCountdown();
 
@@ -185,9 +227,11 @@ setInterval(() => {
 function renderReconStatus() {
   const statusEl = document.getElementById("d-recon-status");
   const resupplyBtn = document.getElementById("d-resupply-btn");
+  const detourBtn = document.getElementById("d-detour-btn");
   const recon = state.reconStatus.get(state.selectedId);
 
   resupplyBtn.classList.remove("cmd-btn-warn");
+  detourBtn.classList.add("hidden");
   if (!recon) {
     statusEl.classList.add("hidden");
     return;
@@ -195,32 +239,83 @@ function renderReconStatus() {
   statusEl.classList.remove("hidden");
   statusEl.className = `recon-status ${recon.safe ? "safe" : "unsafe"}`;
   statusEl.textContent = recon.safe ? "🔭 정찰 완료: 보급로 안전" : `🔭 정찰 완료: ${recon.action}`;
-  if (!recon.safe) resupplyBtn.classList.add("cmd-btn-warn");
+  if (!recon.safe) {
+    resupplyBtn.classList.add("cmd-btn-warn");
+    detourBtn.classList.remove("hidden");
+  }
 }
 
-// --- 보급 COP 이동 애니메이션 (프론트엔드 전용, 백엔드/WS 관여 없음) ---
-function animateConvoy(fromLatLng, toLatLng, durationMs = 10000) {
-  const convoyMarker = L.circleMarker(fromLatLng, {
+// --- 이동 유닛 애니메이션 (프론트엔드 전용, 백엔드/WS 관여 없음) ---
+// path: [[lat,lon], ...] 2개 이상의 경유점을 구간별로 균등 시간 배분해 순서대로 이동
+function animateUnit(path, { color = "#2563eb", durationMs = 10000, className = "convoy-marker", showRoute = false } = {}) {
+  const marker = L.circleMarker(path[0], {
     radius: 6,
-    color: "#2563eb",
-    fillColor: "#2563eb",
+    color,
+    fillColor: color,
     fillOpacity: 1,
-    className: "convoy-marker",
+    className,
   }).addTo(map);
 
+  const route = showRoute
+    ? L.polyline(path, { color, weight: 2, opacity: 0.6, dashArray: "4 6", interactive: false }).addTo(map)
+    : null;
+
+  const segCount = path.length - 1;
+  const segMs = durationMs / segCount;
   const start = performance.now();
+
   function step(now) {
-    const t = Math.min(1, (now - start) / durationMs);
-    const lat = fromLatLng[0] + (toLatLng[0] - fromLatLng[0]) * t;
-    const lon = fromLatLng[1] + (toLatLng[1] - fromLatLng[1]) * t;
-    convoyMarker.setLatLng([lat, lon]);
-    if (t < 1) {
+    const elapsed = now - start;
+    const segIndex = Math.min(segCount - 1, Math.floor(elapsed / segMs));
+    const segT = Math.min(1, (elapsed - segIndex * segMs) / segMs);
+    const [fromLat, fromLon] = path[segIndex];
+    const [toLat, toLon] = path[segIndex + 1];
+    marker.setLatLng([fromLat + (toLat - fromLat) * segT, fromLon + (toLon - fromLon) * segT]);
+    if (elapsed < durationMs) {
       requestAnimationFrame(step);
     } else {
-      map.removeLayer(convoyMarker);
+      map.removeLayer(marker);
+      if (route) map.removeLayer(route);
     }
   }
   requestAnimationFrame(step);
+}
+
+// waypoint가 있으면(직전 우회로 정찰로 확보된 경로) 그 경로를 그대로 따라가고,
+// 없으면 보급기지->에지 직선으로 이동한다.
+function animateConvoy(fromLatLng, toLatLng, durationMs = 10000, waypoint = null) {
+  const path = waypoint ? [fromLatLng, waypoint, toLatLng] : [fromLatLng, toLatLng];
+  animateUnit(path, { color: "#2563eb", durationMs, className: "convoy-marker", showRoute: !!waypoint });
+}
+
+// 직선의 수직 방향으로 경유점을 밀어 우회 경로처럼 보이게 함
+function detourWaypoint(from, to, offsetFraction = 0.35) {
+  const dLat = to[0] - from[0];
+  const dLon = to[1] - from[1];
+  return [(from[0] + to[0]) / 2 - dLon * offsetFraction, (from[1] + to[1]) / 2 + dLat * offsetFraction];
+}
+
+// RECON_DRONE: 보급기지 -> 에지 -> 보급기지 왕복, 서버 정찰 소요시간(6s)에 맞춤
+function animateRecon(edgeLatLng, durationMs = 6000) {
+  animateUnit([DEPOT_COORDS, edgeLatLng, DEPOT_COORDS], {
+    color: "#22d3ee",
+    durationMs,
+    className: "recon-marker",
+    showRoute: true,
+  });
+}
+
+// DETOUR_RECON: 직선이 아닌 우회 경유점을 지나는 경로로 대안 경로 탐색을 표현.
+// 확보된 경유점은 state.detourWaypoint에 저장해 다음 RESUPPLY가 같은 경로를 따르게 한다.
+function animateDetourRecon(edgeId, edgeLatLng, durationMs = 6000) {
+  const waypoint = detourWaypoint(DEPOT_COORDS, edgeLatLng);
+  state.detourWaypoint.set(edgeId, waypoint);
+  animateUnit([DEPOT_COORDS, waypoint, edgeLatLng], {
+    color: "#f08c00",
+    durationMs,
+    className: "detour-marker",
+    showRoute: true,
+  });
 }
 
 async function sendCommand(command) {
@@ -260,7 +355,14 @@ function bindCommandButton(btnId, resolveCommand, onSuccess) {
   });
 }
 
-bindCommandButton("d-recon-btn", () => "RECON_DRONE");
+bindCommandButton("d-recon-btn", () => "RECON_DRONE", () => {
+  const edge = state.edges.get(state.selectedId);
+  if (edge) animateRecon([edge.lat, edge.lon]);
+});
+bindCommandButton("d-detour-btn", () => "DETOUR_RECON", () => {
+  const edge = state.edges.get(state.selectedId);
+  if (edge) animateDetourRecon(state.selectedId, [edge.lat, edge.lon]);
+});
 
 document.getElementById("d-resupply-btn").addEventListener("click", async () => {
   if (!state.selectedId) return;
@@ -274,7 +376,11 @@ document.getElementById("d-resupply-btn").addEventListener("click", async () => 
   const ok = await sendCommand("RESUPPLY");
   if (ok) {
     const edge = state.edges.get(state.selectedId);
-    if (edge) animateConvoy(DEPOT_COORDS, [edge.lat, edge.lon]);
+    if (edge) {
+      const waypoint = state.detourWaypoint.get(state.selectedId) ?? null;
+      animateConvoy(DEPOT_COORDS, [edge.lat, edge.lon], 10000, waypoint);
+      state.detourWaypoint.delete(state.selectedId); // 1회 소비 후 초기화
+    }
   }
   setTimeout(() => { btn.disabled = false; }, 1500);
 });
@@ -306,9 +412,19 @@ function renderAlert(alert) {
     list.classList.remove("muted");
     list.textContent = "";
   }
+  // 정찰/우회로 정찰의 "안전 확인"은 level상 warning으로 오지만 내용은 긍정적 결과이므로
+  // 경보용 주황 아이콘 대신 별도의 안전(초록) 표시로 구분한다.
+  const isSafeRecon = alert.level === "warning" && alert.message.includes("정찰 결과") && alert.message.includes("안전");
   const item = document.createElement("div");
-  item.className = `alert-item ${alert.level}`;
+  item.className = `alert-item ${isSafeRecon ? "safe" : alert.level}`;
   item.innerHTML = `<span class="icon"></span><span>${alert.message} — ${alert.recommended_action}</span>`;
+  if (state.edges.has(alert.edge_id)) {
+    item.classList.add("alert-item-linked");
+    item.addEventListener("click", () => {
+      selectEdge(alert.edge_id);
+      document.getElementById("side-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
   list.prepend(item);
   while (list.children.length > 5) list.removeChild(list.lastChild);
 }
@@ -317,6 +433,17 @@ function renderAlertList(alerts) {
   // 오래된 것부터 순서대로 prepend하면 최신 알림이 최종적으로 맨 위에 위치한다.
   for (const a of alerts.slice(-5)) renderAlert(a);
 }
+
+// --- 전술 AI 프롬프트 패널 (지도 위 좌측 오버레이) ---
+const chatModal = document.getElementById("chat-modal");
+const chatToggleBtn = document.getElementById("chat-toggle-btn");
+function setChatOpen(open) {
+  chatModal.classList.toggle("hidden", !open);
+  chatToggleBtn.classList.toggle("hidden", open);
+  if (open) document.getElementById("chat-input").focus();
+}
+chatToggleBtn.addEventListener("click", () => setChatOpen(true));
+document.getElementById("chat-modal-close").addEventListener("click", () => setChatOpen(false));
 
 // --- 챗봇 ---
 function appendChatMessage(role, text) {
@@ -346,6 +473,26 @@ document.getElementById("chat-form").addEventListener("submit", async (ev) => {
     appendChatMessage("assistant", data.answer);
   } catch (e) {
     appendChatMessage("assistant", `AI 서버에 연결할 수 없습니다: ${e.message}`);
+  }
+});
+
+// --- 시뮬레이터 재시작 ---
+document.getElementById("restart-sim-btn").addEventListener("click", async () => {
+  const proceed = confirm("시뮬레이터를 초기 상태로 재시작하시겠습니까?\n모든 에지의 탄약/경계태세/알림 기록이 초기화됩니다.");
+  if (!proceed) return;
+  const btn = document.getElementById("restart-sim-btn");
+  btn.disabled = true;
+  try {
+    const res = await fetch("/api/simulator/restart", { method: "POST" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    state.reconStatus.clear();
+    const list = document.getElementById("alerts-list");
+    list.className = "muted";
+    list.textContent = "알림 없음";
+  } catch (e) {
+    alert(`재시작 실패: ${e.message}`);
+  } finally {
+    setTimeout(() => { btn.disabled = false; }, 1500);
   }
 });
 

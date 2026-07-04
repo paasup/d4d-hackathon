@@ -19,10 +19,13 @@ class Command(BaseModel):
     command: Literal[
         "RESUPPLY",
         "RECON_DRONE",
+        "DETOUR_RECON",
         "SILENT_MODE",
         "ACTIVE_MODE",
         "ALERT_LEVEL_UP",
         "ALERT_LEVEL_DOWN",
+        "RESET",
+        "RESET_LOW",
     ]
     issued_at: datetime
 
