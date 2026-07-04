@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>중앙 지휘 플랫폼 (COP Dashboard)</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header>
+  <h1>중앙 지휘 플랫폼 (COP Dashboard)</h1>
+  <span id="conn-status" class="badge badge-connecting">연결 중...</span>
+</header>
+
+<main>
+  <section id="map-panel">
+    <div id="map"></div>
+  </section>
+
+  <aside id="side-panel">
+    <h2>에지 상세 정보</h2>
+    <div id="edge-empty" class="muted">지도에서 에지 핀을 클릭하세요.</div>
+    <div id="edge-detail" class="hidden">
+      <div class="detail-row"><span class="label">에지 ID</span><span id="d-id"></span></div>
+      <div class="detail-row"><span class="label">잔여 탄약</span><span id="d-ammo"></span></div>
+      <div class="progress"><div id="d-ammo-bar" class="progress-bar"></div></div>
+      <div class="detail-row"><span class="label">상태</span><span id="d-status"></span></div>
+      <div class="detail-row"><span class="label">좌표</span><span id="d-coords"></span></div>
+      <div id="d-alert" class="alert-banner hidden"></div>
+      <button id="d-resupply-btn">보급 명령 하달</button>
+      <div id="d-command-result"></div>
+    </div>
+
+    <hr />
+    <div class="detail-row"><span class="label">전체 에지 수</span><span id="stat-total">0</span></div>
+    <div class="detail-row"><span class="label">경보 상태 에지 수</span><span id="stat-alert">0</span></div>
+  </aside>
+</main>
+
+<section id="alerts-panel">
+  <h2>최근 알림</h2>
+  <div id="alerts-list" class="muted">알림 없음</div>
+</section>
+
+<section id="chat-panel">
+  <h2>전술 AI 프롬프트</h2>
+  <div id="chat-history"></div>
+  <form id="chat-form">
+    <input id="chat-input" type="text" placeholder="지금 가장 위험한 에지 COP는 어디고 매뉴얼상 대응책은 뭐야?" autocomplete="off" />
+    <button type="submit">전송</button>
+  </form>
+</section>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
