@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "d4d.fullname" . }}-central-backend
+  labels:
+    {{- include "d4d.labels" . | nindent 4 }}
+    app.kubernetes.io/component: central-backend
+spec:
+  replicas: {{ .Values.centralBackend.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "d4d.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: central-backend
+  template:
+    metadata:
+      labels:
+        {{- include "d4d.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: central-backend
+    spec:
+      containers:
+        - name: central-backend
+          image: "{{ .Values.image.centralBackend.repository }}:{{ .Values.image.centralBackend.tag }}"
+          imagePullPolicy: {{ .Values.image.centralBackend.pullPolicy }}
+          ports:
+            - containerPort: 8000
+          env:
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "d4d.fullname" . }}-central-backend
+                  key: API_KEY
+                  optional: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.centralBackend.resources | nindent 12 }}

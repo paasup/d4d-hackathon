@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "d4d.fullname" . }}-edge-simulator
+  labels:
+    {{- include "d4d.labels" . | nindent 4 }}
+    app.kubernetes.io/component: edge-simulator
+spec:
+  replicas: {{ .Values.edgeSimulator.replicas }}
+  selector:
+    matchLabels:
+      {{- include "d4d.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: edge-simulator
+  template:
+    metadata:
+      labels:
+        {{- include "d4d.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: edge-simulator
+    spec:
+      containers:
+        - name: edge-simulator
+          image: "{{ .Values.image.edgeSimulator.repository }}:{{ .Values.image.edgeSimulator.tag }}"
+          imagePullPolicy: {{ .Values.image.edgeSimulator.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "d4d.fullname" . }}-edge-simulator
+          resources:
+            {{- toYaml .Values.edgeSimulator.resources | nindent 12 }}

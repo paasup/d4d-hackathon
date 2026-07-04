@@ -1,0 +1,6 @@
+apiVersion: v2
+name: d4d-hackathon
+description: D4D 해커톤 — Edge COP 시뮬레이터 + 중앙 플랫폼(대시보드/AI) Helm 차트
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

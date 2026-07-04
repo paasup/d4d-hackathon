@@ -1,7 +1,10 @@
-WS_EDGE_URL = "ws://localhost:8000/ws/edge"
-WS_COMMAND_URL = "ws://localhost:8000/ws/command"
+import os
 
-NUM_EDGES = 25
+CENTRAL_BASE_URL = os.environ.get("CENTRAL_WS_BASE_URL", "ws://localhost:8000")
+WS_EDGE_URL = os.environ.get("WS_EDGE_URL", f"{CENTRAL_BASE_URL}/ws/edge")
+WS_COMMAND_URL = os.environ.get("WS_COMMAND_URL", f"{CENTRAL_BASE_URL}/ws/command")
+
+NUM_EDGES = int(os.environ.get("NUM_EDGES", "25"))
 
 LAT_RANGE = (37.5, 38.5)
 LON_RANGE = (127.0, 128.0)

@@ -1,0 +1,54 @@
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  centralBackend:
+    repository: d4d/central-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  edgeSimulator:
+    repository: d4d/edge-simulator
+    tag: latest
+    pullPolicy: IfNotPresent
+
+centralBackend:
+  # in-memory 상태 저장(shared/schemas.py 기준 dict/list)이라 반드시 1로 고정.
+  # 늘리면 대시보드가 라운드로빈으로 서로 다른 백엔드 상태를 보게 된다.
+  replicas: 1
+  # 비워두면 chat_engine이 자동으로 규칙 기반 응답으로 폴백하므로 없어도 동작한다.
+  # 실제 값은 커밋되는 values.yaml이 아니라 --set 이나 별도 values 파일로 주입할 것.
+  apiKey: ""
+  service:
+    type: NodePort
+    port: 8000
+    nodePort: 30080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+ingress:
+  enabled: false
+  className: ""          # 예: nginx
+  annotations: {}
+  host: ""                # 예: d4d.paasup.io
+  tls: []
+  # - secretName: d4d-hackathon-tls
+  #   hosts:
+  #     - d4d.paasup.io
+
+edgeSimulator:
+  # edge-simulator/main.py는 프로세스 하나가 numEdges개를 전부 시뮬레이션하는 설계.
+  # 레플리카를 늘리면 같은 edge_id가 중복 접속하므로 1로 고정.
+  replicas: 1
+  numEdges: 25
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 300m
+      memory: 128Mi

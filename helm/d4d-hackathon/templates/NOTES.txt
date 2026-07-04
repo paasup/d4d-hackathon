@@ -1,0 +1,19 @@
+D4D 해커톤 스택이 배포되었습니다 (namespace: {{ .Release.Namespace }}).
+
+상태 확인:
+  kubectl -n {{ .Release.Namespace }} get pods -w
+
+대시보드 접속:
+{{- if eq .Values.centralBackend.service.type "NodePort" }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "d4d.fullname" . }}-central-backend {{ .Values.centralBackend.service.port }}:{{ .Values.centralBackend.service.port }}
+  # 브라우저에서 http://localhost:{{ .Values.centralBackend.service.port }} 접속
+  # 또는 노드 IP로 직접: http://<node-ip>:{{ .Values.centralBackend.service.nodePort }}
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "d4d.fullname" . }}-central-backend {{ .Values.centralBackend.service.port }}:{{ .Values.centralBackend.service.port }}
+{{- end }}
+
+{{- if not .Values.centralBackend.apiKey }}
+
+참고: centralBackend.apiKey가 비어 있어 챗봇은 규칙 기반 응답으로 동작합니다.
+LLM 응답을 쓰려면 --set centralBackend.apiKey=sk-xxxx 로 다시 설치/업그레이드하세요.
+{{- end }}

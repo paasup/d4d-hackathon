@@ -1,0 +1,12 @@
+**/__pycache__/
+**/*.pyc
+.git/
+.gstack/
+.venv/
+venv/
+.env
+.local.env
+k8s/
+docs/prompt/
+docs/image.png
+README.md
